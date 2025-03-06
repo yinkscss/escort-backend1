@@ -122,7 +122,7 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS bookings (
         id SERIAL PRIMARY KEY,
         client_id INTEGER REFERENCES users(id),
-        escort_id INTEGER REFERENCES escrow(id),
+        escort_id INTEGER REFERENCES escrows(id),
         booking_date TIMESTAMP NOT NULL,
         duration VARCHAR(50) NOT NULL,
         location VARCHAR(255) NOT NULL,
