@@ -32,7 +32,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Session configuration
 const PGStore = pgSession(session);
 
-aapp.use(session({
+app.use(session({
   store: new PGStore({
     pool: pool,
     tableName: 'user_sessions',
