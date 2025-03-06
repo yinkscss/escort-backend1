@@ -32,18 +32,20 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Session configuration
 const PGStore = pgSession(session);
 
-app.use(session({
+aapp.use(session({
   store: new PGStore({
-    pool: pool, // Use your existing PostgreSQL pool
-    tableName: 'user_sessions' // Optional: Custom table name for sessions
+    pool: pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true
   }),
-  secret: process.env.SESSION_SECRET || 'fallback-secret-key', // Provide a fallback for development
+  secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production', // Only set to true in production
-    httpOnly: true, // Prevent client-side JS from accessing the cookie
-    maxAge: 1000 * 60 * 60 * 24 // Session duration (e.g., 1 day)
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
   }
 }));
 
