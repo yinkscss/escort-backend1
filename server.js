@@ -142,7 +142,8 @@ async function initDB() {
   }
 }
 
-
+// Call this before app.listen()
+await initDB();
 
 // Routes
 
@@ -615,8 +616,7 @@ app.get("/admin/dashboard/booking-status-stats", adminAuth, async (req, res) => 
 // Start the server
 const PORT = process.env.PORT || 5000;
 
-// Call this before app.listen()
-await initDB();
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
