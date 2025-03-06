@@ -24,8 +24,7 @@ const __dirname = dirname(__filename);
 
 // CORS configuration
 app.use(cors({
-  origin: [
-    'http://localhost:8080', 
+  origin: [ 
     'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app'
   ],
   credentials: true,
