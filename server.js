@@ -21,14 +21,30 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+
+// CORS configuration
+app.use(cors({
+  origin: [
+    'http://localhost:8080', 
+    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app/'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('/*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(204);
+});
+
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
-
-// Serve static files from the 'uploads' directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // Session configuration
 const PGStore = pgSession(session);
 
@@ -49,16 +65,10 @@ app.use(session({
   }
 }));
 
-// CORS configuration
-app.use(cors({
-  origin: [
-    'http://localhost:8080', 
-    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app/'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+
+// Serve static files from the 'uploads' directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Multer configuration for file uploads
 const storage = multer.diskStorage({
@@ -147,7 +157,19 @@ await initDB();
 
 // Routes
 
+//Base Routes
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "active",
+    message: "Escrow Service API"
+  });
+});
+
 // Signup Route
+
+
+
 app.post("/auth/signup", async (req, res) => {
   const { username, email, password } = req.body;
 
