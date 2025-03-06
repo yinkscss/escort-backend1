@@ -26,7 +26,7 @@ const __dirname = dirname(__filename);
 app.use(cors({
   origin: [
     'http://localhost:8080', 
-    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app/'
+    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -38,13 +38,21 @@ app.use(cors({
   ]
 }));
 
-app.options('/*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin);
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+// Add before routes
+app.use((req, res, next) => {
+  res.header(
+    'Access-Control-Allow-Origin',
+    'https://sophisticated-service-space.vercel.app'
+  );
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(204);
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept'
+  );
+  next();
 });
+
+app.options('*', cors());
 
 // Middleware
 app.use(express.json());
@@ -60,12 +68,12 @@ app.use(session({
     createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET,
-  resave: false,
+  resave: true, // Changed from false to true
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: true, // Force HTTPS
     httpOnly: true,
-    sameSite: 'none', // Required for cross-site cookies
+    sameSite: 'none',
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
@@ -160,19 +168,6 @@ async function initDB() {
 // Call this before app.listen()
 await initDB();
 
-// Add before routes
-app.use((req, res, next) => {
-  res.header(
-    'Access-Control-Allow-Origin',
-    'https://sophisticated-service-space.vercel.app'
-  );
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept'
-  );
-  next();
-});
 
 // Routes
 
@@ -190,6 +185,8 @@ app.get("/", (req, res) => {
 
 
 app.post("/auth/signup", async (req, res) => {
+res.header('Access-Control-Allow-Origin', 'https://sophisticated-service-space.vercel.app');
+
   const { username, email, password } = req.body;
 
   // Validate input
@@ -225,6 +222,7 @@ app.post("/auth/signup", async (req, res) => {
 
 // Login Route
 app.post("/auth/login", async (req, res) => {
+  res.header('Access-Control-Allow-Origin', 'https://sophisticated-service-space.vercel.app');
   const { email, password } = req.body;
 
   if (!email || !password) {
