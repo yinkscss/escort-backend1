@@ -53,7 +53,7 @@ app.use(session({
 app.use(cors({
   origin: [
     'http://localhost:8080', 
-    'https://escort-backend1.onrender.com',
+    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app/'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
