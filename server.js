@@ -84,6 +84,64 @@ const upload = multer({
   }
 });
 
+//initialize Database
+
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) NOT NULL UNIQUE,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'user',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS escrows (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        age INTEGER NOT NULL,
+        bio TEXT,
+        location VARCHAR(255),
+        rates VARCHAR(100),
+        availability VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'active',
+        image VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        sid VARCHAR(255) PRIMARY KEY,
+        sess JSON NOT NULL,
+        expire TIMESTAMP NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS bookings (
+        id SERIAL PRIMARY KEY,
+        client_id INTEGER REFERENCES users(id),
+        escort_id INTEGER REFERENCES escrow(id),
+        booking_date TIMESTAMP NOT NULL,
+        duration VARCHAR(50) NOT NULL,
+        location VARCHAR(255) NOT NULL,
+        service VARCHAR(100) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        special_requests TEXT,
+        contact_name VARCHAR(100),
+        contact_email VARCHAR(255),
+        contact_phone VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Database tables initialized');
+  } catch (err) {
+    console.error('❌ Database initialization error:', err);
+    process.exit(1);
+  }
+}
+
+
+
 // Routes
 
 // Signup Route
@@ -554,6 +612,9 @@ app.get("/admin/dashboard/booking-status-stats", adminAuth, async (req, res) => 
 
 // Start the server
 const PORT = process.env.PORT || 5000;
+
+// Call this before app.listen()
+await initDB();
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
