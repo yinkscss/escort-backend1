@@ -53,7 +53,7 @@ app.use(session({
 app.use(cors({
   origin: [
     'http://localhost:8080', 
-    'https://preview--sophisticated-service-space.lovable.app' , 'https://lovable.dev/projects/0288b4d8-d775-44e2-8bae-4a58ac32baa5'
+    'https://escort-backend1.onrender.com',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
