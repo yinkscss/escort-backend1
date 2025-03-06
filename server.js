@@ -64,16 +64,18 @@ app.use(session({
   store: new PGStore({
     pool: pool,
     tableName: 'user_sessions',
-    createTableIfMissing: true
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 // Cleanup expired sessions every 60s
   }),
   secret: process.env.SESSION_SECRET,
-  resave: true, // Changed from false to true
+  resave: true,
   saveUninitialized: false,
   cookie: {
-    secure: true, // Force HTTPS
+    secure: true,
     httpOnly: true,
     sameSite: 'none',
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000,
+    domain: '.onrender.com' // Allow subdomains
   }
 }));
 
@@ -241,16 +243,29 @@ app.post("/auth/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Save user session data
-    req.session.userId = user.rows[0].id;
-    req.session.username = user.rows[0].username;
-    req.session.role = user.rows[0].role;
+    req.session.regenerate(err => {
+      if (err) throw err;
 
-    console.log("Session after login:", req.session); // Log the session
+      req.session.userId = user.rows[0].id;
+      req.session.username = user.rows[0].username;
+      req.session.role = user.rows[0].role;
 
-    res.status(200).json({
-      message: "Login successful",
-      user: user.rows[0]
+      // Explicitly save session
+      req.session.save(err => {
+        if (err) throw err;
+        
+        res.status(200)
+          .cookie('connect.sid', req.sessionID, {
+            secure: true,
+            httpOnly: true,
+            sameSite: 'none',
+            maxAge: 24 * 60 * 60 * 1000
+          })
+          .json({
+            message: "Login successful",
+            user: user.rows[0]
+          });
+      });
     });
   } catch (err) {
     console.error(err);
@@ -451,11 +466,20 @@ app.post("/logout", (req, res) => {
 
 // Check session route (to verify if user is logged in)
 app.get("/auth/session", (req, res) => {
-  console.log("Session data:", req.session); // Log the entire session
   if (req.session.userId) {
-    res.status(200).json({ message: "Session active", user: req.session });
+    res.status(200).json({
+      isAuthenticated: true,
+      user: {
+        id: req.session.userId,
+        username: req.session.username,
+        role: req.session.role
+      }
+    });
   } else {
-    res.status(401).json({ message: "Not logged in" });
+    res.status(401).json({ 
+      isAuthenticated: false,
+      message: "Not authenticated" 
+    });
   }
 });
 
