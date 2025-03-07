@@ -11,7 +11,6 @@ import morgan from 'morgan';
 import cors from 'cors';
 import { fileURLToPath } from 'url'; // Add this import
 import { dirname } from 'path'; // Add this import
-import { MongoClient } from 'mongodb';
 import MongoStore from 'connect-mongo';
 
 dotenv.config();
@@ -61,16 +60,13 @@ app.use(morgan('dev'));
 
 
 // Add MongoDB connection (before session config):
-const mongoClient = new MongoClient(process.env.MONGODB_URI);
-await mongoClient.connect();
-console.log('✅ MongoDB connected');
 
 app.use(session({
   store: MongoStore.create({
-    client: mongoClient,
+    mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 86400 // 1 day in seconds
+    ttl: 86400
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -81,7 +77,10 @@ app.use(session({
     sameSite: 'none',
     maxAge: 24 * 60 * 60 * 1000
   }
-}));
+}
+
+)
+);
 
 // Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -449,21 +448,6 @@ app.get("/auth/session", (req, res) => {
       isAuthenticated: false,
       message: "Not authenticated" 
     });
-  }
-});
-
-app.get("/admin/sessions", adminAuth, async (req, res) => {
-  try {
-    const sessions = await mongoClient
-      .db()
-      .collection('sessions')
-      .find()
-      .toArray();
-      
-    res.json(sessions);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Error retrieving sessions" });
   }
 });
 
