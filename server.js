@@ -66,7 +66,7 @@ app.use(session({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 86400
+    ttl: 14 * 24 * 60 * 60 // 14 days
   }),
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -74,13 +74,10 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'none',
-    maxAge: 24 * 60 * 60 * 1000
+    sameSite: 'lax', // Changed from 'none' for broader compatibility
+    maxAge: 14 * 24 * 60 * 60 * 1000
   }
-}
-
-)
-);
+}));
 
 // Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
