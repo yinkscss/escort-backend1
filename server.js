@@ -88,15 +88,14 @@ app.use(session({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 14 * 24 * 60 * 60, // 14 days
-    autoRemove: 'interval',
-    autoRemoveInterval: 10 // Minutes
+    ttl: 14 * 24 * 60 * 60,
+    touchAfter: 300 // 5 minutes
   }),
+  name: 'sessionId', // Must match cookie name
   secret: process.env.SESSION_SECRET,
-  name: '_sessionId', // Different name for security
   resave: false,
   saveUninitialized: false,
-  proxy: true, // Crucial for Render's reverse proxy
+  proxy: true,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
@@ -263,19 +262,42 @@ app.post("/auth/login", async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    req.session.userId = user.rows[0].id;
-    req.session.username = user.rows[0].username;
-    req.session.role = user.rows[0].role;
+    // Destroy any existing session first
+    await new Promise((resolve, reject) => {
+      req.session.destroy(err => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
 
-    res.status(200).json({
-      message: "Login successful",
-      user: user.rows[0]
+    // Create new session with user data
+    req.session.regenerate((err) => {
+      if (err) throw err;
+
+      req.session.userId = user.rows[0].id;
+      req.session.username = user.rows[0].username;
+      req.session.role = user.rows[0].role;
+
+      // Force immediate session save
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.status(500).json({ message: "Session error" });
+        }
+
+        console.log('Session after save:', req.session);
+        res.status(200).json({
+          message: "Login successful",
+          user: user.rows[0]
+        });
+      });
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // Escort Profiles Routes (Admin Only)
 app.post("/admin/escorts", adminAuth, upload.single('image'), async (req, res) => {
