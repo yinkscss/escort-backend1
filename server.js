@@ -39,28 +39,38 @@ app.use(cors({
 
 // Add before routes
 app.use(cors({
-  origin: (origin, callback) => {
-    const allowedOrigins = [
-      'https://escort-backend1.onrender.com',
-      'https://sophisticated-service-space.vercel.app',
-      'http://localhost:3000' // Add localhost for development
-    ];
-    
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: [
+    'https://sophisticated-service-space.vercel.app',
+    'http://localhost:3000'
+  ],
   credentials: true,
+  exposedHeaders: ['Set-Cookie'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type', 
     'Authorization', 
     'X-Requested-With',
-    'Accept'
+    'Accept',
+    'Cookie'
   ]
 }));
+
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://sophisticated-service-space.vercel.app',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  next();
+});
 
 app.options('*', cors());
 
@@ -72,36 +82,39 @@ app.use(morgan('dev'));
 
 // Add MongoDB connection (before session config):
 
+// Updated session configuration
 app.use(session({
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 86400,
-    autoRemove: 'native',
-    crypto: {
-      secret: process.env.SESSION_SECRET
-    }
+    ttl: 14 * 24 * 60 * 60, // 14 days
+    autoRemove: 'interval',
+    autoRemoveInterval: 10 // Minutes
   }),
-  name: 'sessionId', // Explicit cookie name
   secret: process.env.SESSION_SECRET,
+  name: '_sessionId', // Different name for security
   resave: false,
   saveUninitialized: false,
-  proxy: true, // Important for Render's reverse proxy
+  proxy: true, // Crucial for Render's reverse proxy
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 14 * 24 * 60 * 60 * 1000,
     domain: process.env.NODE_ENV === 'production' 
-      ? '.onrender.com' 
-      : 'localhost'
+      ? '.onrender.com' // Notice the leading dot
+      : undefined
   }
 }));
 
+
 app.use((req, res, next) => {
+  console.log('Session Verification:');
   console.log('Session ID:', req.sessionID);
-  console.log('Session Data:', req.session);
+  console.log('Session Exists:', !!req.session);
+  console.log('User ID in Session:', req.session?.userId);
+  console.log('Cookie Header:', req.headers.cookie);
   next();
 });
 
@@ -457,35 +470,42 @@ app.post("/logout", (req, res) => {
 
 // Check session route (to verify if user is logged in)
 app.get("/auth/session", (req, res) => {
-  // Add cache-control headers
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
-  
-  if (req.session.userId) {
-    // Regenerate session to prevent fixation
-    req.session.regenerate(err => {
-      if (err) {
-        console.error('Session regeneration error:', err);
-        return res.status(500).json({ error: 'Session error' });
-      }
-      
-      res.status(200).json({
-        isAuthenticated: true,
-        user: {
-          id: req.session.userId,
-          username: req.session.username,
-          role: req.session.role
-        }
+  // Force no caching
+  res.header('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+  res.header('Pragma', 'no-cache');
+  res.header('Expires', '0');
+
+  if (!req.session?.userId) {
+    // Explicitly destroy invalid session
+    req.session.destroy(() => {
+      res.clearCookie('_sessionId', {
+        domain: process.env.NODE_ENV === 'production' 
+          ? '.onrender.com' 
+          : 'localhost',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+      });
+      return res.status(401).json({ 
+        isAuthenticated: false,
+        message: "Not authenticated" 
       });
     });
-  } else {
-    // Explicitly clear invalid session cookie
-    res.clearCookie('sessionId');
-    res.status(401).json({ 
-      isAuthenticated: false,
-      message: "Not authenticated" 
-    });
+    return;
   }
+
+  // Return minimal session info
+  res.status(200).json({
+    isAuthenticated: true,
+    user: {
+      id: req.session.userId,
+      username: req.session.username,
+      role: req.session.role
+    }
+  });
 });
+
+
 // Client creates a booking request
 app.post("/booking", async (req, res) => {
   const {
