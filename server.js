@@ -24,54 +24,35 @@ const __dirname = dirname(__filename);
 
 // CORS configuration
 app.use(cors({
-  origin: [ 
-    'https://escort-backend1.onrender.com','https://sophisticated-service-space.vercel.app'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept'
-  ]
-}));
-
-// Add before routes
-app.use(cors({
   origin: [
     'https://sophisticated-service-space.vercel.app',
-    'http://localhost:3000'
+    'https://escort-backend1.onrender.com'
   ],
   credentials: true,
-  exposedHeaders: ['Set-Cookie'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
+    'Content-Type',
+    'Authorization',
     'X-Requested-With',
     'Accept',
     'Cookie'
   ]
 }));
 
+// Add after CORS config
 app.use((req, res, next) => {
   const allowedOrigins = [
     'https://sophisticated-service-space.vercel.app',
-    'http://localhost:3000'
+    'https://escort-backend1.onrender.com'
   ];
   
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+  if (allowedOrigins.includes(req.headers.origin)) {
+    res.header('Access-Control-Allow-Origin', req.headers.origin);
   }
-  
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Expose-Headers', 'Set-Cookie');
   next();
 });
-
 app.options('*', cors());
 
 // Middleware
@@ -88,25 +69,29 @@ app.use(session({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 14 * 24 * 60 * 60,
-    touchAfter: 300 // 5 minutes
+    ttl: 14 * 24 * 60 * 60, // 14 days
+    autoRemove: 'interval',
+    autoRemoveInterval: 60, // 1 hour
+    crypto: {
+      secret: process.env.SESSION_SECRET
+    }
   }),
-  name: 'sessionId', // Must match cookie name
+  name: 'escort_session',
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   proxy: true,
+  rolling: true, // Reset cookie maxAge on activity
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 14 * 24 * 60 * 60 * 1000,
     domain: process.env.NODE_ENV === 'production' 
-      ? '.onrender.com' // Notice the leading dot
+      ? 'escort-backend1.onrender.com' // Exact domain (no wildcard)
       : undefined
   }
 }));
-
 
 app.use((req, res, next) => {
   console.log('Session Verification:');
@@ -256,67 +241,64 @@ res.header('Access-Control-Allow-Origin', 'https://sophisticated-service-space.v
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
+    }
+
+    // Find user with error handling
     const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     
-    if (!user.rows[0] || !(await bcrypt.compare(password, user.rows[0].password))) {
+    if (!user.rows.length) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Destroy any existing session first
-    await new Promise((resolve, reject) => {
-      req.session.destroy(err => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    // Validate password
+    const isValid = await bcrypt.compare(password, user.rows[0].password);
+    if (!isValid) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
-    // Create new session with user data
+    // Create new session
     req.session.regenerate((err) => {
-      if (err) throw err;
+      if (err) {
+        console.error('Session regeneration error:', err);
+        return res.status(500).json({ message: "Session error" });
+      }
 
+      // Set session data
       req.session.userId = user.rows[0].id;
       req.session.username = user.rows[0].username;
       req.session.role = user.rows[0].role;
 
-      // Force immediate session save
-      req.session.save((err) => {
+      // Force session save
+      req.session.save(err => {
         if (err) {
           console.error('Session save error:', err);
           return res.status(500).json({ message: "Session error" });
         }
 
-        console.log('Session after save:', req.session);
-        res.status(200).json({
-          message: "Login successful",
-          user: user.rows[0]
+        // Verify session in store
+        req.sessionStore.get(req.sessionID, (storeErr, session) => {
+          console.log('Stored session:', session);
+          res.status(200).json({
+            message: "Login successful",
+            user: {
+              id: user.rows[0].id,
+              username: user.rows[0].username,
+              role: user.rows[0].role
+            }
+          });
         });
       });
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-
-// Escort Profiles Routes (Admin Only)
-app.post("/admin/escorts", adminAuth, upload.single('image'), async (req, res) => {
-  const { name, age, bio, location, rates, availability } = req.body;
-  const imageUrl = req.file ? req.file.filename : null; // Get image filename from the upload
-
-  try {
-    const result = await pool.query(
-      "INSERT INTO escrows (name, age, bio, location, rates, availability, image) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-      [name, age, bio, location, rates, availability, imageUrl]
-    );
-
-    res.status(201).json({
-      message: "Escort profile created successfully",
-      escort: result.rows[0]
+    console.error('Login route error:', err);
+    res.status(500).json({ 
+      message: "Server error",
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Error creating escort profile." });
   }
 });
 
