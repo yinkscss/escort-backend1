@@ -9,9 +9,10 @@ import multer from 'multer'; // For handling image uploads
 import path from 'path';
 import morgan from 'morgan';
 import cors from 'cors';
-import pgSession from 'connect-pg-simple'; // For persistent session storage
 import { fileURLToPath } from 'url'; // Add this import
 import { dirname } from 'path'; // Add this import
+import { MongoClient } from 'mongodb';
+import MongoStore from 'connect-mongo';
 
 dotenv.config();
 
@@ -57,30 +58,30 @@ app.options('*', cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
-// Session configuration
-const PGStore = pgSession(session);
+
+
+// Add MongoDB connection (before session config):
+const mongoClient = new MongoClient(process.env.MONGODB_URI);
+await mongoClient.connect();
+console.log('✅ MongoDB connected');
 
 app.use(session({
-  store: new PGStore({
-    pool: pool,
-    tableName: 'user_sessions',
-    createTableIfMissing: true,
-    pruneSessionInterval: 60 // Cleanup expired sessions every 60s
+  store: MongoStore.create({
+    client: mongoClient,
+    dbName: 'seventhveil',
+    collectionName: 'sessions',
+    ttl: 86400 // 1 day in seconds
   }),
   secret: process.env.SESSION_SECRET,
-  resave: true,
+  resave: false,
   saveUninitialized: false,
   cookie: {
-  secure: true,
-  httpOnly: true,
-  sameSite: 'none',
-  maxAge: 24 * 60 * 60 * 1000,
-  domain: process.env.NODE_ENV === 'production' 
-    ? '.onrender.com' 
-    : undefined // Remove domain for localhost
-}
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'none',
+    maxAge: 24 * 60 * 60 * 1000
+  }
 }));
-
 
 // Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -137,12 +138,6 @@ async function initDB() {
         status VARCHAR(50) DEFAULT 'active',
         image VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS user_sessions (
-        sid VARCHAR(255) PRIMARY KEY,
-        sess JSON NOT NULL,
-        expire TIMESTAMP NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS bookings (
@@ -225,49 +220,21 @@ res.header('Access-Control-Allow-Origin', 'https://sophisticated-service-space.v
 
 // Login Route
 app.post("/auth/login", async (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://sophisticated-service-space.vercel.app');
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: "Please provide email and password" });
-  }
-
   try {
-    // Check if user exists
+    const { email, password } = req.body;
     const user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (user.rows.length === 0) {
+    
+    if (!user.rows[0] || !(await bcrypt.compare(password, user.rows[0].password))) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // Compare passwords
-    const isMatch = await bcrypt.compare(password, user.rows[0].password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
+    req.session.userId = user.rows[0].id;
+    req.session.username = user.rows[0].username;
+    req.session.role = user.rows[0].role;
 
-    req.session.regenerate(err => {
-      if (err) throw err;
-
-      req.session.userId = user.rows[0].id;
-      req.session.username = user.rows[0].username;
-      req.session.role = user.rows[0].role;
-
-      // Explicitly save session
-      req.session.save(err => {
-        if (err) throw err;
-        
-        res.status(200)
-          .cookie('connect.sid', req.sessionID, {
-            secure: true,
-            httpOnly: true,
-            sameSite: 'none',
-            maxAge: 24 * 60 * 60 * 1000
-          })
-          .json({
-            message: "Login successful",
-            user: user.rows[0]
-          });
-      });
+    res.status(200).json({
+      message: "Login successful",
+      user: user.rows[0]
     });
   } catch (err) {
     console.error(err);
@@ -482,6 +449,21 @@ app.get("/auth/session", (req, res) => {
       isAuthenticated: false,
       message: "Not authenticated" 
     });
+  }
+});
+
+app.get("/admin/sessions", adminAuth, async (req, res) => {
+  try {
+    const sessions = await mongoClient
+      .db()
+      .collection('sessions')
+      .find()
+      .toArray();
+      
+    res.json(sessions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error retrieving sessions" });
   }
 });
 
