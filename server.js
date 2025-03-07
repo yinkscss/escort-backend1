@@ -38,18 +38,29 @@ app.use(cors({
 }));
 
 // Add before routes
-app.use((req, res, next) => {
-  res.header(
-    'Access-Control-Allow-Origin',
-    'https://sophisticated-service-space.vercel.app'
-  );
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept'
-  );
-  next();
-});
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'https://escort-backend1.onrender.com',
+      'https://sophisticated-service-space.vercel.app',
+      'http://localhost:3000' // Add localhost for development
+    ];
+    
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept'
+  ]
+}));
 
 app.options('*', cors());
 
@@ -66,18 +77,33 @@ app.use(session({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 14 * 24 * 60 * 60 // 14 days
+    ttl: 86400,
+    autoRemove: 'native',
+    crypto: {
+      secret: process.env.SESSION_SECRET
+    }
   }),
+  name: 'sessionId', // Explicit cookie name
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true, // Important for Render's reverse proxy
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax', // Changed from 'none' for broader compatibility
-    maxAge: 14 * 24 * 60 * 60 * 1000
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    domain: process.env.NODE_ENV === 'production' 
+      ? '.onrender.com' 
+      : 'localhost'
   }
 }));
+
+app.use((req, res, next) => {
+  console.log('Session ID:', req.sessionID);
+  console.log('Session Data:', req.session);
+  next();
+});
 
 // Serve static files from the 'uploads' directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -431,23 +457,35 @@ app.post("/logout", (req, res) => {
 
 // Check session route (to verify if user is logged in)
 app.get("/auth/session", (req, res) => {
+  // Add cache-control headers
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  
   if (req.session.userId) {
-    res.status(200).json({
-      isAuthenticated: true,
-      user: {
-        id: req.session.userId,
-        username: req.session.username,
-        role: req.session.role
+    // Regenerate session to prevent fixation
+    req.session.regenerate(err => {
+      if (err) {
+        console.error('Session regeneration error:', err);
+        return res.status(500).json({ error: 'Session error' });
       }
+      
+      res.status(200).json({
+        isAuthenticated: true,
+        user: {
+          id: req.session.userId,
+          username: req.session.username,
+          role: req.session.role
+        }
+      });
     });
   } else {
+    // Explicitly clear invalid session cookie
+    res.clearCookie('sessionId');
     res.status(401).json({ 
       isAuthenticated: false,
       message: "Not authenticated" 
     });
   }
 });
-
 // Client creates a booking request
 app.post("/booking", async (req, res) => {
   const {
