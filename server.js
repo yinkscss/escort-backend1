@@ -61,8 +61,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 
-// Add MongoDB connection (before session config):
-
+app.set('trust proxy', 1);  // Essential for Render's reverse proxy
 // Updated session configuration
 app.use(session({
   store: MongoStore.create({
@@ -88,7 +87,7 @@ app.use(session({
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     maxAge: 14 * 24 * 60 * 60 * 1000,
     domain: process.env.NODE_ENV === 'production' 
-      ? 'escort-backend1.onrender.com' // Exact domain (no wildcard)
+      ? '.onrender.com'  // Add leading dot for subdomains' // Exact domain (no wildcard)
       : undefined
   }
 }));
@@ -482,7 +481,7 @@ app.get("/auth/session", (req, res) => {
   if (!req.session?.userId) {
     // Explicitly destroy invalid session
     req.session.destroy(() => {
-      res.clearCookie('_sessionId', {
+      res.clearCookie('escort_session', {
         domain: process.env.NODE_ENV === 'production' 
           ? '.onrender.com' 
           : 'localhost',
@@ -699,7 +698,16 @@ app.get("/admin/dashboard/booking-status-stats", adminAuth, async (req, res) => 
   }
 });
 
-
+//Temporary Debug Route
+app.get('/debug-session', (req, res) => {
+  req.sessionStore.all((err, sessions) => {
+    if(err) return res.status(500).json({ error: err.message });
+    res.json({
+      currentSessionId: req.sessionID,
+      allSessions: sessions
+    });
+  });
+});
 
 
 // Start the server
