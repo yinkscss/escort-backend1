@@ -41,11 +41,14 @@ app.use(cors({
   ]
 }));
 
+
+
 // Add after CORS config
 app.use((req, res, next) => {
   const allowedOrigins = [
     'https://sophisticated-service-space.vercel.app',
     'https://escort-backend1.onrender.com',
+     'https://www.seventhveilescortservice.pro',
     'https://www.seventhveilescortservice.pro' // ADD NEW DOMAIN
   ];
   
@@ -57,11 +60,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Vary Header
+app.use((req, res, next) => {
+  res.header('Vary', 'Origin');
+  next();
+});
 
 app.options('*', cors({
   origin: [
     'https://sophisticated-service-space.vercel.app',
-    'https://escort-backend1.onrender.com',
+    'https://escort-backend1.onrender.com', 'https://www.seventhveilescortservice.pro',
     'https://www.seventhveilescortservice.pro'
   ],
   credentials: true,
@@ -83,32 +91,36 @@ app.use(morgan('dev'));
 
 
 app.set('trust proxy', 1);  // Essential for Render's reverse proxy
+
+
 // Updated session configuration
 app.use(session({
   store: MongoStore.create({
     mongoUrl: process.env.MONGODB_URI,
     dbName: 'seventhveil',
     collectionName: 'sessions',
-    ttl: 14 * 24 * 60 * 60, // 14 days
+    ttl: 14 * 24 * 60 * 60,
     autoRemove: 'interval',
-    autoRemoveInterval: 60, // 1 hour
+    autoRemoveInterval: 60,
     crypto: {
       secret: process.env.SESSION_SECRET
     }
   }),
   name: 'escort_session',
   secret: process.env.SESSION_SECRET,
-  resave: false,
+  resave: true,
   saveUninitialized: false,
   proxy: true,
-  rolling: true, // Reset cookie maxAge on activity
+  rolling: true,
+  genid: () => crypto.randomUUID(),
+  unset: 'destroy',
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    sameSite: 'none',
     maxAge: 14 * 24 * 60 * 60 * 1000,
     domain: process.env.NODE_ENV === 'production' 
-      ? '.onrender.com'  // Add leading dot for subdomains' // Exact domain (no wildcard)
+      ? '.onrender.com'
       : undefined
   }
 }));
@@ -719,14 +731,21 @@ app.get("/admin/dashboard/booking-status-stats", adminAuth, async (req, res) => 
   }
 });
 
-//Temporary Debug Route
-app.get('/debug-session', (req, res) => {
-  req.sessionStore.all((err, sessions) => {
-    if(err) return res.status(500).json({ error: err.message });
-    res.json({
-      currentSessionId: req.sessionID,
-      allSessions: sessions
-    });
+// 404 Handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
 
