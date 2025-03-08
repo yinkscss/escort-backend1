@@ -26,7 +26,8 @@ const __dirname = dirname(__filename);
 app.use(cors({
   origin: [
     'https://sophisticated-service-space.vercel.app',
-    'https://escort-backend1.onrender.com'
+    'https://escort-backend1.onrender.com',
+    'https://www.seventhveilescortservice.pro' // ADD NEW DOMAIN
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -35,7 +36,8 @@ app.use(cors({
     'Authorization',
     'X-Requested-With',
     'Accept',
-    'Cookie'
+    'Cookie',
+    'Cache-Control' // ADD MISSING HEADER
   ]
 }));
 
@@ -43,7 +45,8 @@ app.use(cors({
 app.use((req, res, next) => {
   const allowedOrigins = [
     'https://sophisticated-service-space.vercel.app',
-    'https://escort-backend1.onrender.com'
+    'https://escort-backend1.onrender.com',
+    'https://www.seventhveilescortservice.pro' // ADD NEW DOMAIN
   ];
   
   if (allowedOrigins.includes(req.headers.origin)) {
@@ -53,7 +56,25 @@ app.use((req, res, next) => {
   res.header('Access-Control-Expose-Headers', 'Set-Cookie');
   next();
 });
-app.options('*', cors());
+
+
+app.options('*', cors({
+  origin: [
+    'https://sophisticated-service-space.vercel.app',
+    'https://escort-backend1.onrender.com',
+    'https://www.seventhveilescortservice.pro'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Cookie',
+    'Cache-Control'
+  ]
+}));
 
 // Middleware
 app.use(express.json());
@@ -305,7 +326,7 @@ app.post("/auth/login", async (req, res) => {
 
 app.get("/bookings/user", async (req, res) => {
   // Disable caching
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+   res.header("Cache-Control", "no-store, private");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
 
